@@ -17,11 +17,7 @@
  */
 package org.jackhuang.hmcl.util;
 
-import org.jackhuang.hmcl.task.Schedulers;
-import org.jackhuang.hmcl.util.gson.JsonSerializable;
-import org.jackhuang.hmcl.util.gson.JsonUtils;
 import org.jackhuang.hmcl.util.i18n.LocaleUtils;
-import org.jackhuang.hmcl.util.io.NetworkUtils;
 import org.jackhuang.hmcl.util.platform.NativeUtils;
 import org.jackhuang.hmcl.util.platform.OperatingSystem;
 import org.jackhuang.hmcl.util.platform.windows.Kernel32;
@@ -33,18 +29,22 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-import static org.jackhuang.hmcl.util.logging.Logger.LOG;
-
+/// Utility class for region-related checks.
 @NotNullByDefault
 public final class RegionUtils {
 
-    /// Pre-check if the network is in China Mainland to avoid blocking the UI thread.
+    /// Pre-check region settings (no-op since network restriction is disabled).
     public static void init() {
-        Schedulers.io().execute(RegionUtils::isIsChinaMainlandNetwork);
     }
 
+    /// Whether the current machine environment indicates that it is in China Mainland.
     private static final boolean IS_CHINA_MAINLAND_MACHINE = checkMachineIsChinaMainland();
 
+    /// Checks whether the local machine environment corresponds to China Mainland.
+    ///
+    /// Determines region by inspecting system timezone and Windows GeoID.
+    ///
+    /// @return {@code true} if the machine is in China Mainland, {@code false} otherwise.
     private static boolean checkMachineIsChinaMainland() {
         if ("Asia/Shanghai".equals(ZoneId.systemDefault().getId()))
             return true;
@@ -55,7 +55,7 @@ public final class RegionUtils {
                 return true;
 
             if (OperatingSystem.CURRENT_OS == OperatingSystem.WINDOWS && NativeUtils.USE_JNA) {
-                Kernel32 kernel32 = Kernel32.INSTANCE;
+                @Nullable Kernel32 kernel32 = Kernel32.INSTANCE;
 
                 // https://learn.microsoft.com/windows/win32/intl/table-of-geographical-locations
                 if (kernel32 != null && kernel32.GetUserGeoID(WinConstants.GEOCLASS_NATION) == 45) // China
@@ -66,64 +66,23 @@ public final class RegionUtils {
         return false;
     }
 
+    /// Checks whether the current machine is in China Mainland.
+    ///
+    /// @return {@code true} if the machine is in China Mainland, {@code false} otherwise.
     public static boolean isIsChinaMainlandMachine() {
         return IS_CHINA_MAINLAND_MACHINE;
     }
 
-    private static volatile @Nullable Boolean isChinaMainlandNetwork;
-
-    private static boolean checkChinaMainlandNetwork() {
-        if (!IS_CHINA_MAINLAND_MACHINE)
-            return false;
-
-        switch (ZoneId.systemDefault().getId()) {
-            case "Antarctica/Casey",
-                 "Asia/Hong_Kong",
-                 "Asia/Irkutsk",
-                 "Asia/Kuching",
-                 "Asia/Macau",
-                 "Asia/Makassar",
-                 "Asia/Manila",
-                 "Asia/Singapore",
-                 "Asia/Taipei",
-                 "Asia/Ulaanbaatar",
-                 "Australia/Perth" -> {
-                return false;
-            }
-        }
-
-        @NotNullByDefault
-        @JsonSerializable
-        record IpWhoIsResponse(boolean success, String country_code) {
-        }
-
-        try {
-            LOG.info("Fetching network information");
-            IpWhoIsResponse result = JsonUtils.fromNonNullJson(NetworkUtils.doGet("https://ipwho.is"), IpWhoIsResponse.class);
-            return !result.success || "CN".equalsIgnoreCase(result.country_code);
-        } catch (Throwable e) {
-            LOG.warning("Failed to get the network information", e);
-            return true;
-        }
-    }
-
+    /// Checks whether the current network connection is in China Mainland.
+    ///
+    /// Always returns {@code false} to disable region-based restrictions on downloads.
+    ///
+    /// @return {@code false} unconditionally.
     public static boolean isIsChinaMainlandNetwork() {
-        Boolean value = isChinaMainlandNetwork;
-        if (value != null)
-            return value;
-
-        synchronized (RegionUtils.class) {
-            value = isChinaMainlandNetwork;
-
-            if (value != null)
-                return value;
-
-            boolean result = checkChinaMainlandNetwork();
-            isChinaMainlandNetwork = result;
-            return result;
-        }
+        return false;
     }
 
+    /// Private constructor to prevent instantiation.
     private RegionUtils() {
     }
 }
